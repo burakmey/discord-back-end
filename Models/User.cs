@@ -9,6 +9,8 @@
         public byte[] PasswordHash { get; set; } = new byte[32];
         public byte[] PasswordSalt { get; set; } = new byte[32];
         [Required] public DateTime RegisteredAt { get; set; }
+        public string? RefreshToken { get; set; }
+        public DateTime? RefreshTokenEndDate { get; set; }
         public ICollection<Server>? OwnedServers { get; set; }
         public ICollection<Friendship>? Friendships { get; set; }
         public ICollection<ChatGroupMember>? ChatGroups { get; set; }
