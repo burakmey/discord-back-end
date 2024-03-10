@@ -4,6 +4,7 @@ global using Microsoft.EntityFrameworkCore;
 global using discord_back_end.Models;
 global using discord_back_end.Data;
 global using discord_back_end.AbstractModels;
+global using discord_back_end.Services;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -19,7 +20,8 @@ namespace discord_back_end
             builder.Services.AddDbContext<DataContext>(options => { options.UseSqlServer(builder.Configuration["CONNECTION_STRING"]); });
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddTransient<Services.TokenService>();
+            builder.Services.AddTransient<TokenService>();
+            builder.Services.AddTransient<UserService>();
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
             {
                 options.TokenValidationParameters = new()
@@ -35,7 +37,7 @@ namespace discord_back_end
                 };
             });
             builder.Services.AddAuthorization();
-            builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.WithOrigins(builder.Configuration["ORIGIN"] ?? throw new Exception("ORIGIN not found!")).AllowAnyMethod().AllowAnyHeader()));
+            builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.WithOrigins(builder.Configuration["ORIGIN"] ?? throw new Exception("ORIGIN not found!")).AllowAnyMethod().AllowAnyHeader().AllowCredentials()));
 
             var app = builder.Build();
             app.UseAuthentication();
