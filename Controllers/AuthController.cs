@@ -1,72 +1,50 @@
 ﻿using discord_back_end.ControllersFeatures.AuthFeatures.Login;
+using discord_back_end.ControllersFeatures.AuthFeatures.LoginWithRefreshToken;
 using discord_back_end.ControllersFeatures.AuthFeatures.Register;
-using discord_back_end.Services;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace discord_back_end.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class AuthController : ControllerBase
+    public class AuthController(UserService userService, TokenService tokenService) : ControllerBase
     {
-        readonly DataContext dataContext;
-        readonly TokenService tokenService;
-
-        public AuthController(DataContext dataContext, TokenService tokenService)
-        {
-            this.dataContext = dataContext;
-            this.tokenService = tokenService;
-        }
+        readonly UserService userService = userService;
+        readonly TokenService tokenService = tokenService;
+        readonly int accessTokenSecond = 10;
+        readonly int refreshTokenSecond = 5;
 
         [HttpPost("[action]")]
         public async Task<IActionResult> Login(LoginRequest request)
         {
-            var user = await dataContext.Users.FirstOrDefaultAsync(user => user.Email == request.Email);
+            User? user = await userService.GetUserAsync(request);
             if (user == null)
-                return BadRequest("User not found!");
-            if (!VerifyPasswordHash(request.Password, user.PasswordHash, user.PasswordSalt))
-                return BadRequest("Incorrect!");
-            Token token = tokenService.CreateAccessToken(1);
-            LoginResponse loginResponse = new(token, user);
-            return Ok(loginResponse);
-        }
-
-        static bool VerifyPasswordHash(string password, byte[] passwordHash, byte[] passwordSalt)
-        {
-            using var hmac = new HMACSHA512(passwordSalt);
-            var computedHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(password));
-            return computedHash.SequenceEqual(passwordHash);
+                return BadRequest("Incorrect email or password!");
+            Token token = tokenService.CreateAccessToken(accessTokenSecond);
+            await userService.UpdateRefreshTokenAsync(user, token.RefreshToken, token.Expiration, refreshTokenSecond);
+            LoginResponse response = new(token);
+            return Ok(response);
         }
 
         [HttpPost("[action]")]
         public async Task<IActionResult> Register(RegisterRequest request)
         {
-            if (dataContext.Users.Any(user => user.Email == request.Email))
-                return BadRequest("Email already exists.");
-            if (dataContext.Users.Any(user => user.UserName == request.UserName))
-                return BadRequest("UserName already exists.");
-            CreatePasswordHash(request.Password, out byte[] passwordHash, out byte[] passwordSalt);
-            var user = new User
-            {
-                Email = request.Email,
-                UserName = request.UserName,
-                DisplayName = request.DisplayName,
-                PasswordHash = passwordHash,
-                PasswordSalt = passwordSalt,
-                RegisteredAt = DateTime.Now,
-            };
-            dataContext.Users.Add(user);
-            await dataContext.SaveChangesAsync();
-            return Ok("User created!");
+            RegisterResponse response = await userService.CreateUser(request);
+            if (!response.Succeeded)
+                return BadRequest(response.Message);
+            return Ok(response.Message);
         }
 
-        static void CreatePasswordHash(string password, out byte[] passwordHash, out byte[] passwordSalt)
+        [HttpPost("[action]")]
+        public async Task<IActionResult> LoginWithRefreshToken(LoginWithRefreshTokenRequest request)
         {
-            using var hmac = new HMACSHA512();
-            passwordSalt = hmac.Key;
-            passwordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(password));
+            User? user = await userService.GetUserWithRefreshTokenAsync(request.RefreshToken);
+            if (user == null)
+                return BadRequest("Invalid refresh token!");
+            Token token = tokenService.CreateAccessToken(accessTokenSecond);
+            await userService.UpdateRefreshTokenAsync(user, token.RefreshToken, token.Expiration, refreshTokenSecond);
+            LoginWithRefreshTokenResponse response = new(token);
+            return Ok(response);
         }
     }
 }
